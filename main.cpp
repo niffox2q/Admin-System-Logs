@@ -353,9 +353,7 @@ bool AS_Logs::Unload(char* error, size_t maxlen)
     return true;
 }
 
-// Мета данные, спасибо сладенький ShadowRipper
-// Благодаря тебе и ChatGPT я написал свой первый плагин
-// С любовью, niffox <3
+
 const char* AS_Logs::GetAuthor() { return "niffox"; }
 const char* AS_Logs::GetDate() { return __DATE__; }
 const char* AS_Logs::GetDescription() { return "Simple plugin for admin logs"; }
