@@ -288,7 +288,7 @@ void AS_Logs::OnGameServerSteamAPIActivated()
 
 CON_COMMAND_F(mm_as_logs_reload, "Reloading AS_Logs plugin config", FCVAR_SERVER_CAN_EXECUTE) {
     LoadConfig();
-    META_CONPRINTF("AS_Logs plugin reloaded.");
+    META_CONPRINTF("AS_Logs plugin reloaded.\n");
 }
 bool AS_Logs::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool late)
 {
