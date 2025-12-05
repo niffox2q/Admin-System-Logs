@@ -125,9 +125,21 @@ void SendWebhookAsync(const string& webhookUrl, const string& jsonData)
     }
 }
 
-void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int PunishType, int duration)
-{
+string CleanASCII(const char* s) {
+    std::string r;
+    for (size_t i = 0; s[i]; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c >= 0x20 && c <= 0x7E)  // только валидные ASCII
+            r.push_back(c);
+    }
+    return r;
+}
 
+
+void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int PunishType, int duration, const char* pSteamID, const char* pName, int method)
+{
+    string description;
+    // method 1 = OnPlayerPunish+ method 2 OnPlayerUnpunish method 3 OnOfflinePlayerpunish method 4 OnOfflinePlayerUnP
     CCSPlayerController *admin = CCSPlayerController::FromSlot(adminSlot);
     string adminName;
     string adminSteamID;
@@ -141,7 +153,6 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
         adminName = admin->GetPlayerName();
         adminSteamID = to_string(admin->m_steamID);
     }
-
 
     CCSPlayerController *target = CCSPlayerController::FromSlot(targetSlot);
     string targetName;
@@ -160,16 +171,33 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
             PunishTypeName = "Бан";
             break;
         case 1:
-            PunishTypeName = "Выключил микрофон";
+            PunishTypeName = "Мут микрофона";
             break;
         case 2:
-            PunishTypeName = "Выключил текстовый чат";
+            PunishTypeName = "Мут текстовог чат";
             break;
         case 3:
             PunishTypeName = "Полный мут";
             break;
         default:
             PunishTypeName = string("Вид не определён") + "(" +to_string(PunishType)+")";
+    }
+    switch (method) {
+        case 1:
+            description = "🛑 Новое наказание";
+            break;
+        case 2:
+            description = "🙏 Наказание снято";
+            break;
+        case 3:
+            description = "🛑 Новое оффлайн наказание";
+            break;
+        case 4:
+            description = "🙏 Наказание снято оффлайн";
+            break;
+        default:
+            description = "Ошибка.";
+            break;
     }
     try
     {
@@ -178,12 +206,11 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
 
         json embeds = json::array();
         json jemb;
-        jemb["description"] = "## 🛑 Новое наказание";
+        jemb["description"] = "## "+description;
         jemb["color"] = 0xFFFFFF;
 
         json jfields = json::array();
 
-        // Ник админа
         json jField;
         jField["name"] = "👤 Администратор";
         jField["value"] = "[`" + adminName + "`](https://steamcommunity.com/profiles/" + adminSteamID + ")";
@@ -205,18 +232,43 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
         jfields.push_back(jField);
 
         // Ник нарушителя
-        jField = json();
-        jField["name"] = "🎯 Нарушитель";
-        jField["value"] = "[`" + targetName + "`](https://steamcommunity.com/profiles/" + targetSteamID + ")";
-        jField["inline"] = true;
-        jfields.push_back(jField);
+        if (method == 1 || method == 2 ) { // тут передается targetSlot, поэтому не нужно изменять
+            jField = json();
+            jField["name"] = "🎯 Нарушитель";
+            jField["value"] = "[`" + targetName + "`](https://steamcommunity.com/profiles/" + targetSteamID + ")";
+            jField["inline"] = true;
+            jfields.push_back(jField);
+        } else if (method == 3){ // тут сразу передается ник и стим айди, поэтому не нужно искать их через
+            jField = json();
+            jField["name"] = "🎯 Нарушитель";
+            jField["value"] = string("[`") + pName + "`](https://steamcommunity.com/profiles/" + pSteamID + ")";
+            jField["inline"] = true;
+            jfields.push_back(jField);
+        }else if (method == 4){ // тут сразу передается ник и стим айди, поэтому не нужно искать их через
+            jField = json();
+            jField["name"] = "🎯 Нарушитель";
+            jField["value"] = string("`Отсутствует из-за оффлайн`");
+            jField["inline"] = true;
+            jfields.push_back(jField);
+        }
+
 
         // STEAM ID нарушителя
-        jField = json();
-        jField["name"] = "⚙️ STEAM ID:";
-        jField["value"] = "```" + targetSteamID + "```";
-        jField["inline"] = true;
-        jfields.push_back(jField);
+        if (method == 1 || method == 2) {
+            // тут не передается чар с стимID, поэтому мы ищем его через CSSPlayerController и слот игрока
+            jField = json();
+            jField["name"] = "⚙️ STEAM ID:";
+            jField["value"] = "```" + targetSteamID + "```";
+            jField["inline"] = true;
+            jfields.push_back(jField);
+        } // ВОТ ЭТА ХУЕТА НЕ БЫЛА ЗАКРЫТА
+        if (method == 3 || method == 4) { // Тут напрямую передается STEAMID
+            jField = json();
+            jField["name"] = "⚙️ STEAM ID:";
+            jField["value"] = string("```") + CleanASCII(pSteamID) + "```";
+            jField["inline"] = true;
+            jfields.push_back(jField);
+        }
 
         // Пустое после
         jField = json();
@@ -226,18 +278,22 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
         jfields.push_back(jField);
 
         // Причина наказания
-        jField = json();
-        jField["name"] = "📑 Причина";
-        jField["value"] = string("```") + (reason ? reason : "не указана") + "```";
-        jField["inline"] = false;
-        jfields.push_back(jField);
+        if (method == 1 || method == 3) { // Причина указывается только в наказаниях
+            jField = json();
+            jField["name"] = "📑 Причина";
+            jField["value"] = string("```") + (reason ? reason : "не указана") + "```";
+            jField["inline"] = false;
+            jfields.push_back(jField);
+        }
 
         // Длительность
-        jField = json();
-        jField["name"] = "⌛ Длительность";
-        jField["value"] =  string("```") + to_string(duration) + " сек." + "```";
-        jField["inline"] = false;
-        jfields.push_back(jField);
+        if (method == 1 || method == 3) { // Длительность указывается только в наказаниях
+            jField = json();
+            jField["name"] = "⌛ Длительность";
+            jField["value"] =  string("```") + to_string(duration) + " сек." + "```";
+            jField["inline"] = false;
+            jfields.push_back(jField);
+        }
 
         // Вид наказания
         jField = json();
@@ -254,7 +310,6 @@ void SendWebhookToDiscord(int adminSlot, int targetSlot, const char* reason, int
 
 
         SendWebhookAsync(webhook, jsonStr);
-
     }
     catch (const exception& e)
     {
@@ -337,10 +392,15 @@ void AS_Logs::AllPluginsLoaded() {
 
     admin_api->OnPlayerPunish(g_PLID,
     [](int iSlot, int iType, int iTime, const char* szReason, int iAdminID) {
-        string adminName = "Unknown Admin";
-        string targetName = "Unknown Player";
+        SendWebhookToDiscord(iAdminID,iSlot,szReason,iType,iTime,"none","none",1);
+    });
 
-        SendWebhookToDiscord(iAdminID,iSlot,szReason,iType,iTime);
+    admin_api->OnPlayerUnpunish(g_PLID,[](int iSlot, int iType, int iAdminID){
+        SendWebhookToDiscord(iAdminID,iSlot,"none",iType,0,"none","none",2);
+    });
+
+    admin_api->OnOfflinePlayerPunish(g_PLID,[](const char* szSteamID64, const char* szName, int iType, int iTime, const char* szReason, int iAdminID) {
+        SendWebhookToDiscord(iAdminID,0,szReason,iType,iTime,szSteamID64,szName,3);
     });
 }
 // Выгрузка плагина
@@ -361,4 +421,4 @@ const char* AS_Logs::GetLicense() { return "Free"; }
 const char* AS_Logs::GetLogTag() { return "[AS] Logs"; }
 const char* AS_Logs::GetName() { return "[AS] Logs"; }
 const char* AS_Logs::GetURL() { return ""; }
-const char* AS_Logs::GetVersion() { return "1.0.1"; }
+const char* AS_Logs::GetVersion() { return "1.0.2"; }
